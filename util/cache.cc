@@ -362,6 +362,7 @@ class ShardedLRUCache : public Cache {
     return shard_[Shard(hash)].Insert(key, hash, value, charge, deleter);
   }
   Handle* Lookup(const Slice& key) override {
+    // printf("进入了Lookup\n");
     const uint32_t hash = HashSlice(key);
     return shard_[Shard(hash)].Lookup(key, hash);
   }

@@ -290,6 +290,8 @@ add_executable(leveldbutil
 )
 target_link_libraries(leveldbutil leveldb)
 
+target_link_libraries(leveldb /lib/libisal.a)
+
 if(LEVELDB_BUILD_TESTS)
   enable_testing()
 

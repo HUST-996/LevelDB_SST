@@ -31,6 +31,7 @@ std::string LogFileName(const std::string& dbname, uint64_t number) {
 }
 
 std::string TableFileName(const std::string& dbname, uint64_t number) {
+  // printf("TableFileName调用了\n");
   assert(number > 0);
   return MakeFileName(dbname, number, "ldb");
 }

@@ -36,6 +36,7 @@
 #include "util/env_posix_test_helper.h"
 #include "util/posix_logger.h"
 
+#include <isa-l.h>
 namespace leveldb {
 
 namespace {
@@ -572,13 +573,13 @@ class PosixEnv : public Env {
 
   Status NewWritableFile(const std::string& filename,
                          WritableFile** result) override {
+    printf("进入了NewWritableFile\n");
     int fd = ::open(filename.c_str(),
                     O_TRUNC | O_WRONLY | O_CREAT | kOpenBaseFlags, 0644);
     if (fd < 0) {
       *result = nullptr;
       return PosixError(filename, errno);
     }
-
     *result = new PosixWritableFile(filename, fd);
     return Status::OK();
   }
@@ -603,15 +604,76 @@ class PosixEnv : public Env {
   Status GetChildren(const std::string& directory_path,
                      std::vector<std::string>* result) override {
     result->clear();
-    ::DIR* dir = ::opendir(directory_path.c_str());
+    // ::DIR* dir = ::opendir(directory_path.c_str());
+    ::DIR* dir = ::opendir("/tmp/testdb");
     if (dir == nullptr) {
       return PosixError(directory_path, errno);
     }
     struct ::dirent* entry;
+
     while ((entry = ::readdir(dir)) != nullptr) {
       result->emplace_back(entry->d_name);
     }
     ::closedir(dir);
+    
+    //my code
+    dir = ::opendir("/tmp/testdb/stripe1");
+    if (dir == nullptr) {
+      // return PosixError(directory_path, errno);
+      return Status::OK();
+    }
+    while ((entry = ::readdir(dir)) != nullptr) {
+      if(strlen(entry->d_name) > 2) {
+        std::string str;
+        str.append(entry->d_name);
+        str.erase(6);
+        str.append(".ldb");
+        result->emplace_back(str.c_str());
+      }
+    }
+    dir = ::opendir("/tmp/testdb/stripe2");
+    if (dir == nullptr) {
+      // return PosixError(directory_path, errno);
+      return Status::OK();
+    }
+    while ((entry = ::readdir(dir)) != nullptr) {
+      if(strlen(entry->d_name) > 2) {
+        std::string str;
+        str.append(entry->d_name);
+        str.erase(6);
+        str.append(".ldb");
+        result->emplace_back(str.c_str());
+      }
+    }
+    dir = ::opendir("/tmp/testdb/stripe3");
+    if (dir == nullptr) {
+      // return PosixError(directory_path, errno);
+      return Status::OK();
+    }
+    while ((entry = ::readdir(dir)) != nullptr) {
+      if(strlen(entry->d_name) > 2) {
+        std::string str;
+        str.append(entry->d_name);
+        str.erase(6);
+        str.append(".ldb");
+        result->emplace_back(str.c_str());
+      }
+    }
+
+    dir = ::opendir("/tmp/testdb/stripe4");
+    if (dir == nullptr) {
+      // return PosixError(directory_path, errno);
+      return Status::OK();
+    }
+    while ((entry = ::readdir(dir)) != nullptr) {
+      if(strlen(entry->d_name) > 2) {
+        std::string str;
+        str.append(entry->d_name);
+        str.erase(6);
+        str.append(".ldb");
+        result->emplace_back(str.c_str());
+      }
+    }
     return Status::OK();
   }
 

@@ -323,6 +323,7 @@ void Version::ForEachOverlapping(Slice user_key, Slice internal_key, void* arg,
 
 Status Version::Get(const ReadOptions& options, const LookupKey& k,
                     std::string* value, GetStats* stats) {
+  printf("Version中的Get调用了\n");
   stats->seek_file = nullptr;
   stats->seek_file_level = -1;
 
@@ -393,9 +394,9 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
   state.saver.ucmp = vset_->icmp_.user_comparator();
   state.saver.user_key = k.user_key();
   state.saver.value = value;
-
+  
   ForEachOverlapping(state.saver.user_key, state.ikey, &state, &State::Match);
-
+  printf("value为%s\n", value->c_str());
   return state.found ? state.s : Status::NotFound(Slice());
 }
 

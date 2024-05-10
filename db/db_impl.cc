@@ -291,7 +291,6 @@ void DBImpl::RemoveObsoleteFiles() {
 
 Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
   mutex_.AssertHeld();
-
   // Ignore error from CreateDir since the creation of the DB is
   // committed only when the descriptor is created, and this directory
   // may already exist from a previous failed creation attempt.
@@ -301,7 +300,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
   if (!s.ok()) {
     return s;
   }
-
+  //正确打开数据库时不会执行此段代码
   if (!env_->FileExists(CurrentFileName(dbname_))) {
     if (options_.create_if_missing) {
       Log(options_.info_log, "Creating DB %s since it was missing.",
@@ -315,6 +314,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
           dbname_, "does not exist (create_if_missing is false)");
     }
   } else {
+    //正确打开数据库时不会执行此段代码
     if (options_.error_if_exists) {
       return Status::InvalidArgument(dbname_,
                                      "exists (error_if_exists is true)");
@@ -338,6 +338,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
   const uint64_t prev_log = versions_->PrevLogNumber();
   std::vector<std::string> filenames;
   s = env_->GetChildren(dbname_, &filenames);
+  // filenames.push_back("000005.ldb");
   if (!s.ok()) {
     return s;
   }
@@ -353,6 +354,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
         logs.push_back(number);
     }
   }
+
   if (!expected.empty()) {
     char buf[50];
     std::snprintf(buf, sizeof(buf), "%d missing files; e.g.",
@@ -1114,14 +1116,15 @@ int64_t DBImpl::TEST_MaxNextLevelOverlappingBytes() {
 
 Status DBImpl::Get(const ReadOptions& options, const Slice& key,
                    std::string* value) {
+  printf("进入到了get函数\n");
   Status s;
-  MutexLock l(&mutex_);
+  MutexLock l(&mutex_); //信号量
   SequenceNumber snapshot;
   if (options.snapshot != nullptr) {
     snapshot =
         static_cast<const SnapshotImpl*>(options.snapshot)->sequence_number();
   } else {
-    snapshot = versions_->LastSequence();
+    snapshot = versions_->LastSequence();// 查询操作 不增加序列号
   }
 
   MemTable* mem = mem_;
@@ -1139,19 +1142,21 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
     mutex_.Unlock();
     // First look in the memtable, then in the immutable memtable (if any).
     LookupKey lkey(key, snapshot);
-    if (mem->Get(lkey, value, &s)) {
+    if (mem->Get(lkey, value, &s)) { //查找memtable
       // Done
-    } else if (imm != nullptr && imm->Get(lkey, value, &s)) {
+    } else if (imm != nullptr && imm->Get(lkey, value, &s)) { //查找immutable Memtable
       // Done
-    } else {
+    } else { //查找ldb文件(sstable文件)
+      printf("查找ldb文件\n");
       s = current->Get(options, lkey, value, &stats);
       have_stat_update = true;
     }
     mutex_.Lock();
   }
 
+  //是否需要启动压缩合并
   if (have_stat_update && current->UpdateStats(stats)) {
-    MaybeScheduleCompaction();
+    MaybeScheduleCompaction(); //某个文件seek次数过多需要合并
   }
   mem->Unref();
   if (imm != nullptr) imm->Unref();
@@ -1198,14 +1203,15 @@ Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
 }
 
 Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
-  Writer w(&mutex_);
+  Writer w(&mutex_); //mutex互斥信号量
   w.batch = updates;
   w.sync = options.sync;
   w.done = false;
 
   MutexLock l(&mutex_);
-  writers_.push_back(&w);
+  writers_.push_back(&w); //进队列排队
   while (!w.done && &w != writers_.front()) {
+    //w完成了或者w在队头就可以结束循环
     w.cv.Wait();
   }
   if (w.done) {
@@ -1213,13 +1219,14 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
   }
 
   // May temporarily unlock and wait.
-  Status status = MakeRoomForWrite(updates == nullptr);
-  uint64_t last_sequence = versions_->LastSequence();
+  Status status = MakeRoomForWrite(updates == nullptr); //腾出足够的空间
+  uint64_t last_sequence = versions_->LastSequence(); //上次使用的序列号
+  // printf("%ld\n", last_sequence);
   Writer* last_writer = &w;
   if (status.ok() && updates != nullptr) {  // nullptr batch is for compactions
-    WriteBatch* write_batch = BuildBatchGroup(&last_writer);
+    WriteBatch* write_batch = BuildBatchGroup(&last_writer);  //将多个writebatch合并成一个
     WriteBatchInternal::SetSequence(write_batch, last_sequence + 1);
-    last_sequence += WriteBatchInternal::Count(write_batch);
+    last_sequence += WriteBatchInternal::Count(write_batch); //下一个批任务起始的序号是last_sequence + 1
 
     // Add to log and apply to memtable.  We can release the lock
     // during this phase since &w is currently responsible for logging
@@ -1227,6 +1234,8 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
     // into mem_.
     {
       mutex_.Unlock();
+      //先将record写入到文件中 再将record插入到mem_表中
+      //Contents返回Slice对象
       status = log_->AddRecord(WriteBatchInternal::Contents(write_batch));
       bool sync_error = false;
       if (status.ok() && options.sync) {
@@ -1235,7 +1244,10 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
           sync_error = true;
         }
       }
+      //文件写入成功
       if (status.ok()) {
+        //写入到mem表中
+        // printf("%s\n", "写入到mem表中");
         status = WriteBatchInternal::InsertInto(write_batch, mem_);
       }
       mutex_.Lock();
@@ -1481,7 +1493,8 @@ void DBImpl::GetApproximateSizes(const Range* range, int n, uint64_t* sizes) {
 // Default implementations of convenience methods that subclasses of DB
 // can call if they wish
 Status DB::Put(const WriteOptions& opt, const Slice& key, const Slice& value) {
-  WriteBatch batch;
+  // printf("%s\n", "进入了Put函数");
+  WriteBatch batch; //批处理操作，允许将多个写操作组成一个原子操作
   batch.Put(key, value);
   return Write(opt, &batch);
 }
@@ -1495,8 +1508,8 @@ Status DB::Delete(const WriteOptions& opt, const Slice& key) {
 DB::~DB() = default;
 
 Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
+  printf("%s\n", "进入了Open函数中");
   *dbptr = nullptr;
-
   DBImpl* impl = new DBImpl(options, dbname);
   impl->mutex_.Lock();
   VersionEdit edit;
@@ -1523,10 +1536,12 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
     edit.SetLogNumber(impl->logfile_number_);
     s = impl->versions_->LogAndApply(&edit, &impl->mutex_);
   }
+  
   if (s.ok()) {
     impl->RemoveObsoleteFiles();
     impl->MaybeScheduleCompaction();
   }
+  
   impl->mutex_.Unlock();
   if (s.ok()) {
     assert(impl->mem_ != nullptr);

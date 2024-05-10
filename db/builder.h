@@ -7,6 +7,8 @@
 
 #include "leveldb/status.h"
 
+typedef unsigned char u8;
+
 namespace leveldb {
 
 struct Options;
@@ -25,6 +27,14 @@ class VersionEdit;
 Status BuildTable(const std::string& dbname, Env* env, const Options& options,
                   TableCache* table_cache, Iterator* iter, FileMetaData* meta);
 
+// my code
+int splitFile(const std::string& inputFile, const std::string& bash);
+
+void createDirectory(const std::string& path);
+
 }  // namespace leveldb
+
+int gen_redundance_file(int k, int p, int len, const char* filePath1, const char* filePath2, 
+ const char* filePath3, const char* filePath4, const char* outputFile1, const char* outputFile2);
 
 #endif  // STORAGE_LEVELDB_DB_BUILDER_H_
